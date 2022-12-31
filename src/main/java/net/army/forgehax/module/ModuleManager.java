@@ -1,20 +1,19 @@
 package net.army.forgehax.module;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.entity.layers.RenderLayer;
-import net.minecraft.client.resources.language.I18n;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,16 +24,9 @@ public class ModuleManager {
     private static final Minecraft mc = Minecraft.getInstance();
 
     private static class ModuleComparator implements Comparator<Module> {
-
         @Override
         public int compare(Module a, Module b) {
-            if (mc.font.width(a.name) > mc.font.width(b.name)) {
-                return -1;
-            }
-            if (mc.font.width(a.name) < mc.font.width(b.name)) {
-                return 1;
-            }
-            return 0;
+            return Integer.compare(mc.font.width(b.name), mc.font.width(a.name));
         }
     }
 
@@ -101,17 +93,10 @@ public class ModuleManager {
         }
     }
 
-    /*@SubscribeEvent
-    public void LivingFall(LivingFallEvent event) {
-        if (this.getModuleByName("NoFall").toggled) {
-            event.setDistance(0);
-        }
-    }*/
-
     @SubscribeEvent
     public void onRenderWorld(RenderLevelStageEvent event) {
         if (this.getModuleByName("X-Ray").toggled) {
-            if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_SOLID_BLOCKS) {
+            if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_CUTOUT_BLOCKS) {
                 ClientLevel world = mc.level;
                 if (mc.level == null)
                     return;
@@ -122,18 +107,74 @@ public class ModuleManager {
                     for (int y = 0; y < 256; y++) {
                         for (int z = -viewDistance; z <= viewDistance; z++) {
                             BlockPos pos = new BlockPos(x, y, z);
-                            BlockState blockState = world.getBlockState(pos);
-                            Block block = blockState.getBlock();
+                            Block block = world.getBlockState(pos).getBlock();
 
-                            // Check if the block's translation key does not contain "ore"
-                            if (!block.getName().toString().toLowerCase().contains("ore")) {
-                                // Set the block to be invisible
-
+                            if (this.getModuleByName("X-Ray").getWhitelist().contains(block.getName().toString())) {
+                                //this.renderOutline(event, pos);
+                                this.renderOutline(event, new BlockPos(0, 0, 0));
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    private static VertexBuffer vertexBuffer;
+    public static boolean requestedRefresh = false;
+
+    private void renderOutline(RenderLevelStageEvent event, BlockPos pos) {
+        int x = pos.getX(), y = pos.getY(), z = pos.getZ();
+        float r = 1.0f, g = 0.0f, b = 0.0f, a = 1.0f;
+
+        drawLine(event, x, y, z, x + 1, y, z, r, g, b, a);
+        drawLine(event, x + 1, y, z, x + 1, y + 1, z, r, g, b, a);
+        drawLine(event, x + 1, y + 1, z, x, y + 1, z, r, g, b, a);
+        drawLine(event, x, y + 1, z, x, y, z, r, g, b, a);
+
+        drawLine(event, x, y, z + 1, x + 1, y, z + 1, r, g, b, a);
+        drawLine(event, x + 1, y, z + 1, x + 1, y + 1, z + 1, r, g, b, a);
+        drawLine(event, x + 1, y + 1, z + 1, x, y + 1, z + 1, r, g, b, a);
+        drawLine(event, x, y + 1, z + 1, x, y, z + 1, r, g, b, a);
+
+        drawLine(event, x, y, z, x, y, z + 1, r, g, b, a);
+        drawLine(event, x + 1, y, z, x + 1, y, z + 1, r, g, b, a);
+        drawLine(event, x + 1, y + 1, z, x + 1, y + 1, z + 1, r, g, b, a);
+        drawLine(event, x, y + 1, z, x, y + 1, z + 1, r, g, b, a);
+    }
+
+    private void drawLine(RenderLevelStageEvent event, double x1, double y1, double z1, double x2, double y2, double z2, float r, float g, float b, float a) {
+        vertexBuffer = new VertexBuffer();
+        BufferBuilder buffer = Tesselator.getInstance().getBuilder();
+
+        buffer.begin(VertexFormat.Mode.LINE_STRIP, DefaultVertexFormat.POSITION_COLOR);
+        buffer.vertex(x1, y1, z1).color(r, g, b, a).endVertex();
+        buffer.vertex(x2, y2, z2).color(r, g, b, a).endVertex();
+
+        vertexBuffer.bind();
+        vertexBuffer.upload(buffer.end());
+        VertexBuffer.unbind();
+
+        Vec3 view = Minecraft.getInstance().getEntityRenderDispatcher().camera.getPosition();
+
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glEnable(GL11.GL_LINE_SMOOTH);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+
+        PoseStack matrix = event.getPoseStack();
+        matrix.pushPose();
+        matrix.translate(-view.x, -view.y, -view.z);
+
+        vertexBuffer.bind();
+        vertexBuffer.drawWithShader(matrix.last().pose(), event.getProjectionMatrix().copy(), RenderSystem.getShader());
+        VertexBuffer.unbind();
+        matrix.popPose();
+
+        GL11.glEnable(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glDisable(GL11.GL_LINE_SMOOTH);
     }
 }

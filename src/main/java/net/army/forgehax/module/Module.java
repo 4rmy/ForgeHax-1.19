@@ -1,6 +1,8 @@
 package net.army.forgehax.module;
 
-public class Module {
+import java.util.ArrayList;
+
+public abstract class Module {
 
     public String name;
     public int key;
@@ -46,5 +48,9 @@ public class Module {
 
     public void Update() {
 
+    }
+
+    public ArrayList<String> getWhitelist() {
+        return null;
     }
 }
