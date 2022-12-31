@@ -2,8 +2,10 @@ package net.army.forgehax;
 
 import com.mojang.logging.LogUtils;
 import net.army.forgehax.module.ModuleManager;
+import net.army.forgehax.module.modules.misc.*;
 import net.army.forgehax.module.modules.movement.*;
-import net.army.forgehax.module.modules.player.NoFall;
+import net.army.forgehax.module.modules.player.*;
+import net.army.forgehax.module.modules.render.*;
 import net.army.forgehax.ui.UI;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -23,8 +25,15 @@ public class ForgeHax {
     public ForgeHax()
     {
         // ADD HACK MODULES
-        moduleManager.addModule(new Fly());
+        //combat
+        //player
         moduleManager.addModule(new NoFall());
+        //movement
+        moduleManager.addModule(new Fly());
+        //render
+        moduleManager.addModule(new XRay());
+        //misc
+        moduleManager.addModule(new FullBright());
 
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
